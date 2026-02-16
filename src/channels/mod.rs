@@ -1,20 +1,28 @@
 pub mod cli;
+pub mod dingtalk;
 pub mod discord;
 pub mod email_channel;
 pub mod imessage;
 pub mod irc;
+pub mod lark;
 pub mod matrix;
+pub mod onebot;
+pub mod qq;
 pub mod slack;
 pub mod telegram;
 pub mod traits;
 pub mod whatsapp;
 
 pub use cli::CliChannel;
+pub use dingtalk::DingTalkChannel;
 pub use discord::DiscordChannel;
 pub use email_channel::EmailChannel;
 pub use imessage::IMessageChannel;
 pub use irc::IrcChannel;
+pub use lark::LarkChannel;
 pub use matrix::MatrixChannel;
+pub use onebot::OneBotChannel;
+pub use qq::QQChannel;
 pub use slack::SlackChannel;
 pub use telegram::TelegramChannel;
 pub use traits::Channel;
@@ -323,7 +331,8 @@ pub fn build_system_prompt(
         prompt.push_str("```\n<invoke>\n{\"name\": \"tool_name\", \"arguments\": {\"param\": \"value\"}}\n</invoke>\n```\n\n");
         prompt.push_str("You may use multiple tool calls in a single response. ");
         prompt.push_str("After tool execution, results appear in <tool_result> tags. ");
-        prompt.push_str("Continue reasoning with the results until you can give a final answer.\n\n");
+        prompt
+            .push_str("Continue reasoning with the results until you can give a final answer.\n\n");
     }
 
     // ── 2. Safety ───────────────────────────────────────────────
@@ -489,6 +498,10 @@ pub fn handle_command(command: crate::ChannelCommands, config: &Config) -> Resul
                 ("WhatsApp", config.channels_config.whatsapp.is_some()),
                 ("Email", config.channels_config.email.is_some()),
                 ("IRC", config.channels_config.irc.is_some()),
+                ("DingTalk", config.channels_config.dingtalk.is_some()),
+                ("Lark/Feishu", config.channels_config.lark.is_some()),
+                ("OneBot", config.channels_config.onebot.is_some()),
+                ("QQ", config.channels_config.qq.is_some()),
             ] {
                 println!("  {} {name}", if configured { "✅" } else { "❌" });
             }
@@ -614,6 +627,55 @@ pub async fn doctor_channels(config: Config) -> Result<()> {
                 irc.nickserv_password.clone(),
                 irc.sasl_password.clone(),
                 irc.verify_tls.unwrap_or(true),
+            )),
+        ));
+    }
+
+    if let Some(ref dt) = config.channels_config.dingtalk {
+        channels.push((
+            "DingTalk",
+            Arc::new(DingTalkChannel::new(
+                dt.client_id.clone(),
+                dt.client_secret.clone(),
+                dt.allowed_users.clone(),
+            )),
+        ));
+    }
+
+    if let Some(ref lk) = config.channels_config.lark {
+        channels.push((
+            "Lark/Feishu",
+            Arc::new(LarkChannel::new(
+                lk.app_id.clone(),
+                lk.app_secret.clone(),
+                lk.encrypt_key.clone(),
+                lk.verification_token.clone(),
+                lk.allowed_users.clone(),
+                lk.use_feishu,
+            )),
+        ));
+    }
+
+    if let Some(ref ob) = config.channels_config.onebot {
+        channels.push((
+            "OneBot",
+            Arc::new(OneBotChannel::new(
+                ob.ws_url.clone(),
+                ob.access_token.clone(),
+                ob.reconnect_interval,
+                ob.group_trigger_prefix.clone(),
+                ob.allowed_users.clone(),
+            )),
+        ));
+    }
+
+    if let Some(ref qq) = config.channels_config.qq {
+        channels.push((
+            "QQ",
+            Arc::new(QQChannel::new(
+                qq.app_id.clone(),
+                qq.app_secret.clone(),
+                qq.allowed_users.clone(),
             )),
         ));
     }
@@ -808,6 +870,43 @@ pub async fn start_channels(config: Config) -> Result<()> {
             irc.nickserv_password.clone(),
             irc.sasl_password.clone(),
             irc.verify_tls.unwrap_or(true),
+        )));
+    }
+
+    if let Some(ref dt) = config.channels_config.dingtalk {
+        channels.push(Arc::new(DingTalkChannel::new(
+            dt.client_id.clone(),
+            dt.client_secret.clone(),
+            dt.allowed_users.clone(),
+        )));
+    }
+
+    if let Some(ref lk) = config.channels_config.lark {
+        channels.push(Arc::new(LarkChannel::new(
+            lk.app_id.clone(),
+            lk.app_secret.clone(),
+            lk.encrypt_key.clone(),
+            lk.verification_token.clone(),
+            lk.allowed_users.clone(),
+            lk.use_feishu,
+        )));
+    }
+
+    if let Some(ref ob) = config.channels_config.onebot {
+        channels.push(Arc::new(OneBotChannel::new(
+            ob.ws_url.clone(),
+            ob.access_token.clone(),
+            ob.reconnect_interval,
+            ob.group_trigger_prefix.clone(),
+            ob.allowed_users.clone(),
+        )));
+    }
+
+    if let Some(ref qq) = config.channels_config.qq {
+        channels.push(Arc::new(QQChannel::new(
+            qq.app_id.clone(),
+            qq.app_secret.clone(),
+            qq.allowed_users.clone(),
         )));
     }
 
@@ -1269,7 +1368,10 @@ mod tests {
 
         // Reproduces the production crash path where channel logs truncate at 80 chars.
         let result = std::panic::catch_unwind(|| crate::util::truncate_with_ellipsis(msg, 80));
-        assert!(result.is_ok(), "truncate_with_ellipsis should never panic on UTF-8");
+        assert!(
+            result.is_ok(),
+            "truncate_with_ellipsis should never panic on UTF-8"
+        );
 
         let truncated = result.unwrap();
         assert!(!truncated.is_empty());

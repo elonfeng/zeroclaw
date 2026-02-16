@@ -781,6 +781,9 @@ pub struct ChannelsConfig {
     pub email: Option<crate::channels::email_channel::EmailConfig>,
     pub irc: Option<IrcConfig>,
     pub lark: Option<LarkConfig>,
+    pub dingtalk: Option<DingTalkConfig>,
+    pub onebot: Option<OneBotConfig>,
+    pub qq: Option<QQConfig>,
 }
 
 impl Default for ChannelsConfig {
@@ -797,6 +800,9 @@ impl Default for ChannelsConfig {
             email: None,
             irc: None,
             lark: None,
+            dingtalk: None,
+            onebot: None,
+            qq: None,
         }
     }
 }
@@ -1083,6 +1089,55 @@ impl Default for AuditConfig {
             sign_events: false,
         }
     }
+}
+
+/// DingTalk (钉钉) configuration for Stream Mode messaging
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DingTalkConfig {
+    /// Client ID (AppKey) from DingTalk developer console
+    pub client_id: String,
+    /// Client Secret (AppSecret) from DingTalk developer console
+    pub client_secret: String,
+    /// Allowed user IDs (staff IDs). Empty = deny all, "*" = allow all
+    #[serde(default)]
+    pub allowed_users: Vec<String>,
+}
+
+/// OneBot V11 configuration (for QQ via go-cqhttp, NapCat, Lagrange, etc.)
+/// Connects to any OneBotV11-compliant WebSocket server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OneBotConfig {
+    /// WebSocket URL of the OneBot server (e.g., "ws://127.0.0.1:8080/ws")
+    pub ws_url: String,
+    /// Optional Bearer token for WebSocket authentication
+    #[serde(default)]
+    pub access_token: Option<String>,
+    /// Auto-reconnect interval in seconds (default: 30)
+    #[serde(default = "default_onebot_reconnect")]
+    pub reconnect_interval: u64,
+    /// Prefixes that trigger the bot in group chats (e.g., `/`, `!`)
+    #[serde(default)]
+    pub group_trigger_prefix: Vec<String>,
+    /// Allowed user IDs (QQ numbers). Empty = deny all, "*" = allow all
+    #[serde(default)]
+    pub allowed_users: Vec<String>,
+}
+
+fn default_onebot_reconnect() -> u64 {
+    30
+}
+
+/// QQ Official Bot configuration (Tencent QQ Bot SDK)
+/// Uses OAuth2 authentication with WebSocket gateway for events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QQConfig {
+    /// App ID from QQ Bot developer console
+    pub app_id: String,
+    /// App Secret from QQ Bot developer console
+    pub app_secret: String,
+    /// Allowed user IDs. Empty = deny all, "*" = allow all
+    #[serde(default)]
+    pub allowed_users: Vec<String>,
 }
 
 // ── Config impl ──────────────────────────────────────────────────
@@ -1460,6 +1515,9 @@ mod tests {
                 email: None,
                 irc: None,
                 lark: None,
+                dingtalk: None,
+                onebot: None,
+                qq: None,
             },
             memory: MemoryConfig::default(),
             tunnel: TunnelConfig::default(),
@@ -1717,6 +1775,9 @@ default_temperature = 0.7
             email: None,
             irc: None,
             lark: None,
+            dingtalk: None,
+            onebot: None,
+            qq: None,
         };
         let toml_str = toml::to_string_pretty(&c).unwrap();
         let parsed: ChannelsConfig = toml::from_str(&toml_str).unwrap();
@@ -1876,6 +1937,9 @@ channel_id = "C123"
             email: None,
             irc: None,
             lark: None,
+            dingtalk: None,
+            onebot: None,
+            qq: None,
         };
         let toml_str = toml::to_string_pretty(&c).unwrap();
         let parsed: ChannelsConfig = toml::from_str(&toml_str).unwrap();

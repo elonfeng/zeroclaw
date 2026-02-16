@@ -1,4 +1,6 @@
-use crate::config::schema::{IrcConfig, WhatsAppConfig};
+use crate::config::schema::{
+    DingTalkConfig, IrcConfig, LarkConfig, OneBotConfig, QQConfig, WhatsAppConfig,
+};
 use crate::config::{
     AutonomyConfig, BrowserConfig, ChannelsConfig, ComposioConfig, Config, DiscordConfig,
     HeartbeatConfig, IMessageConfig, MatrixConfig, MemoryConfig, ObservabilityConfig,
@@ -139,7 +141,11 @@ pub fn run_wizard() -> Result<Config> {
         || config.channels_config.slack.is_some()
         || config.channels_config.imessage.is_some()
         || config.channels_config.matrix.is_some()
-        || config.channels_config.email.is_some();
+        || config.channels_config.email.is_some()
+        || config.channels_config.dingtalk.is_some()
+        || config.channels_config.lark.is_some()
+        || config.channels_config.onebot.is_some()
+        || config.channels_config.qq.is_some();
 
     if has_channels && config.api_key.is_some() {
         let launch: bool = Confirm::new()
@@ -195,7 +201,11 @@ pub fn run_channels_repair_wizard() -> Result<Config> {
         || config.channels_config.slack.is_some()
         || config.channels_config.imessage.is_some()
         || config.channels_config.matrix.is_some()
-        || config.channels_config.email.is_some();
+        || config.channels_config.email.is_some()
+        || config.channels_config.dingtalk.is_some()
+        || config.channels_config.lark.is_some()
+        || config.channels_config.onebot.is_some()
+        || config.channels_config.qq.is_some();
 
     if has_channels && config.api_key.is_some() {
         let launch: bool = Confirm::new()
@@ -1324,6 +1334,9 @@ fn setup_channels() -> Result<ChannelsConfig> {
         email: None,
         irc: None,
         lark: None,
+        dingtalk: None,
+        onebot: None,
+        qq: None,
     };
 
     loop {
@@ -1392,13 +1405,45 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     "— HTTP endpoint"
                 }
             ),
+            format!(
+                "DingTalk   {}",
+                if config.dingtalk.is_some() {
+                    "✅ connected"
+                } else {
+                    "— 钉钉 Stream Mode"
+                }
+            ),
+            format!(
+                "Lark/Feishu {}",
+                if config.lark.is_some() {
+                    "✅ connected"
+                } else {
+                    "— 飞书 messaging"
+                }
+            ),
+            format!(
+                "OneBot/QQ  {}",
+                if config.onebot.is_some() {
+                    "✅ connected"
+                } else {
+                    "— QQ via OneBotV11"
+                }
+            ),
+            format!(
+                "QQ Official {}",
+                if config.qq.is_some() {
+                    "✅ connected"
+                } else {
+                    "— Tencent QQ Bot"
+                }
+            ),
             "Done — finish setup".to_string(),
         ];
 
         let choice = Select::new()
             .with_prompt("  Connect a channel (or Done to continue)")
             .items(&options)
-            .default(8)
+            .default(12)
             .interact()?;
 
         match choice {
@@ -2077,6 +2122,305 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     style(&port).cyan()
                 );
             }
+            8 => {
+                // ── DingTalk ──
+                println!();
+                println!(
+                    "  {} {}",
+                    style("DingTalk Setup").white().bold(),
+                    style("— 钉钉 Stream Mode").dim()
+                );
+                print_bullet("1. Go to DingTalk developer console (open.dingtalk.com)");
+                print_bullet("2. Create an app and enable the Stream Mode bot");
+                print_bullet("3. Copy the Client ID (AppKey) and Client Secret (AppSecret)");
+                println!();
+
+                let client_id: String = Input::new()
+                    .with_prompt("  Client ID (AppKey)")
+                    .interact_text()?;
+
+                if client_id.trim().is_empty() {
+                    println!("  {} Skipped", style("→").dim());
+                    continue;
+                }
+
+                let client_secret: String = Input::new()
+                    .with_prompt("  Client Secret (AppSecret)")
+                    .interact_text()?;
+
+                // Test connection
+                print!("  {} Testing connection... ", style("⏳").dim());
+                let client = reqwest::blocking::Client::new();
+                let body = serde_json::json!({
+                    "clientId": client_id,
+                    "clientSecret": client_secret,
+                });
+                match client
+                    .post("https://api.dingtalk.com/v1.0/gateway/connections/open")
+                    .json(&body)
+                    .send()
+                {
+                    Ok(resp) if resp.status().is_success() => {
+                        println!(
+                            "\r  {} DingTalk credentials verified        ",
+                            style("✅").green().bold()
+                        );
+                    }
+                    _ => {
+                        println!(
+                            "\r  {} Connection failed — check your credentials",
+                            style("❌").red().bold()
+                        );
+                        continue;
+                    }
+                }
+
+                let users_str: String = Input::new()
+                    .with_prompt("  Allowed staff IDs (comma-separated, '*' for all)")
+                    .allow_empty(true)
+                    .interact_text()?;
+
+                let allowed_users: Vec<String> = users_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
+                config.dingtalk = Some(DingTalkConfig {
+                    client_id,
+                    client_secret,
+                    allowed_users,
+                });
+            }
+            9 => {
+                // ── Lark/Feishu ──
+                println!();
+                println!(
+                    "  {} {}",
+                    style("Lark/Feishu Setup").white().bold(),
+                    style("— 飞书 messaging").dim()
+                );
+                print_bullet("1. Go to Feishu developer console (open.feishu.cn) or Lark (open.larksuite.com)");
+                print_bullet("2. Create an app and enable the Bot capability");
+                print_bullet("3. Copy the App ID and App Secret");
+                println!();
+
+                let use_feishu = Select::new()
+                    .with_prompt("  Platform")
+                    .items(&["Feishu (飞书 - Chinese)", "Lark (International)"])
+                    .default(0)
+                    .interact()?
+                    == 0;
+
+                let app_id: String = Input::new().with_prompt("  App ID").interact_text()?;
+
+                if app_id.trim().is_empty() {
+                    println!("  {} Skipped", style("→").dim());
+                    continue;
+                }
+
+                let app_secret: String =
+                    Input::new().with_prompt("  App Secret").interact_text()?;
+
+                // Test connection
+                print!("  {} Testing connection... ", style("⏳").dim());
+                let base = if use_feishu {
+                    "https://open.feishu.cn"
+                } else {
+                    "https://open.larksuite.com"
+                };
+                let client = reqwest::blocking::Client::new();
+                let body = serde_json::json!({
+                    "app_id": app_id,
+                    "app_secret": app_secret,
+                });
+                match client
+                    .post(format!(
+                        "{base}/open-apis/auth/v3/tenant_access_token/internal"
+                    ))
+                    .json(&body)
+                    .send()
+                {
+                    Ok(resp) if resp.status().is_success() => {
+                        let data: serde_json::Value = resp.json().unwrap_or_default();
+                        let code = data.get("code").and_then(|c| c.as_i64()).unwrap_or(-1);
+                        if code == 0 {
+                            println!(
+                                "\r  {} {} credentials verified        ",
+                                style("✅").green().bold(),
+                                if use_feishu { "Feishu" } else { "Lark" }
+                            );
+                        } else {
+                            let msg = data
+                                .get("msg")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("unknown error");
+                            println!("\r  {} Auth error: {msg}", style("❌").red().bold());
+                            continue;
+                        }
+                    }
+                    _ => {
+                        println!(
+                            "\r  {} Connection failed — check your credentials",
+                            style("❌").red().bold()
+                        );
+                        continue;
+                    }
+                }
+
+                let users_str: String = Input::new()
+                    .with_prompt("  Allowed user IDs (comma-separated, '*' for all)")
+                    .allow_empty(true)
+                    .interact_text()?;
+
+                let allowed_users: Vec<String> = users_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
+                config.lark = Some(LarkConfig {
+                    app_id,
+                    app_secret,
+                    encrypt_key: None,
+                    verification_token: None,
+                    allowed_users,
+                    use_feishu,
+                });
+            }
+            10 => {
+                // ── OneBot/QQ ──
+                println!();
+                println!(
+                    "  {} {}",
+                    style("OneBot/QQ Setup").white().bold(),
+                    style("— QQ via OneBotV11 (go-cqhttp, NapCat, Lagrange)").dim()
+                );
+                print_bullet("1. Install an OneBotV11 implementation (NapCat, Lagrange, etc.)");
+                print_bullet("2. Enable the WebSocket server in your OneBot config");
+                print_bullet("3. Note the WebSocket URL (e.g., ws://127.0.0.1:3001)");
+                println!();
+
+                let ws_url: String = Input::new()
+                    .with_prompt("  WebSocket URL")
+                    .default("ws://127.0.0.1:3001".into())
+                    .interact_text()?;
+
+                let token: String = Input::new()
+                    .with_prompt("  Access token (optional, Enter to skip)")
+                    .allow_empty(true)
+                    .interact_text()?;
+
+                let prefix_str: String = Input::new()
+                    .with_prompt(
+                        "  Group trigger prefixes (comma-separated, e.g., /,!, Enter to skip)",
+                    )
+                    .allow_empty(true)
+                    .interact_text()?;
+
+                let group_trigger_prefix: Vec<String> = prefix_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
+                let users_str: String = Input::new()
+                    .with_prompt("  Allowed QQ numbers (comma-separated, '*' for all)")
+                    .allow_empty(true)
+                    .interact_text()?;
+
+                let allowed_users: Vec<String> = users_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
+                config.onebot = Some(OneBotConfig {
+                    ws_url,
+                    access_token: if token.is_empty() { None } else { Some(token) },
+                    reconnect_interval: 30,
+                    group_trigger_prefix,
+                    allowed_users,
+                });
+
+                println!("  {} OneBot configured", style("✅").green().bold());
+            }
+            11 => {
+                // ── QQ Official ──
+                println!();
+                println!(
+                    "  {} {}",
+                    style("QQ Official Setup").white().bold(),
+                    style("— Tencent QQ Bot SDK").dim()
+                );
+                print_bullet("1. Go to QQ Bot developer console (q.qq.com)");
+                print_bullet("2. Create a bot application");
+                print_bullet("3. Copy the App ID and App Secret");
+                println!();
+
+                let app_id: String = Input::new().with_prompt("  App ID").interact_text()?;
+
+                if app_id.trim().is_empty() {
+                    println!("  {} Skipped", style("→").dim());
+                    continue;
+                }
+
+                let app_secret: String =
+                    Input::new().with_prompt("  App Secret").interact_text()?;
+
+                // Test connection
+                print!("  {} Testing connection... ", style("⏳").dim());
+                let client = reqwest::blocking::Client::new();
+                let body = serde_json::json!({
+                    "appId": app_id,
+                    "clientSecret": app_secret,
+                });
+                match client
+                    .post("https://bots.qq.com/app/getAppAccessToken")
+                    .json(&body)
+                    .send()
+                {
+                    Ok(resp) if resp.status().is_success() => {
+                        let data: serde_json::Value = resp.json().unwrap_or_default();
+                        if data.get("access_token").is_some() {
+                            println!(
+                                "\r  {} QQ Bot credentials verified        ",
+                                style("✅").green().bold()
+                            );
+                        } else {
+                            println!(
+                                "\r  {} Auth error — check your credentials",
+                                style("❌").red().bold()
+                            );
+                            continue;
+                        }
+                    }
+                    _ => {
+                        println!(
+                            "\r  {} Connection failed — check your credentials",
+                            style("❌").red().bold()
+                        );
+                        continue;
+                    }
+                }
+
+                let users_str: String = Input::new()
+                    .with_prompt("  Allowed user IDs (comma-separated, '*' for all)")
+                    .allow_empty(true)
+                    .interact_text()?;
+
+                let allowed_users: Vec<String> = users_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
+                config.qq = Some(QQConfig {
+                    app_id,
+                    app_secret,
+                    allowed_users,
+                });
+            }
             _ => break, // Done
         }
         println!();
@@ -2110,6 +2454,22 @@ fn setup_channels() -> Result<ChannelsConfig> {
     }
     if config.webhook.is_some() {
         active.push("Webhook");
+    }
+    if config.dingtalk.is_some() {
+        active.push("DingTalk");
+    }
+    if config.lark.is_some() {
+        active.push(if config.lark.as_ref().is_some_and(|l| l.use_feishu) {
+            "Feishu"
+        } else {
+            "Lark"
+        });
+    }
+    if config.onebot.is_some() {
+        active.push("OneBot");
+    }
+    if config.qq.is_some() {
+        active.push("QQ");
     }
 
     println!(
@@ -2561,7 +2921,11 @@ fn print_summary(config: &Config) {
         || config.channels_config.slack.is_some()
         || config.channels_config.imessage.is_some()
         || config.channels_config.matrix.is_some()
-        || config.channels_config.email.is_some();
+        || config.channels_config.email.is_some()
+        || config.channels_config.dingtalk.is_some()
+        || config.channels_config.lark.is_some()
+        || config.channels_config.onebot.is_some()
+        || config.channels_config.qq.is_some();
 
     println!();
     println!(
