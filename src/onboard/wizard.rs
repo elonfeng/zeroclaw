@@ -1,4 +1,4 @@
-use crate::config::schema::{IrcConfig, WhatsAppConfig};
+use crate::config::schema::{IrcConfig, OneBotConfig, WhatsAppConfig};
 use crate::config::{
     AutonomyConfig, BrowserConfig, ChannelsConfig, ComposioConfig, Config, DiscordConfig,
     HeartbeatConfig, IMessageConfig, MatrixConfig, MemoryConfig, ObservabilityConfig,
@@ -155,7 +155,8 @@ pub fn run_wizard() -> Result<Config> {
         || config.channels_config.slack.is_some()
         || config.channels_config.imessage.is_some()
         || config.channels_config.matrix.is_some()
-        || config.channels_config.email.is_some();
+        || config.channels_config.email.is_some()
+        || config.channels_config.onebot.is_some();
 
     if has_channels && config.api_key.is_some() {
         let launch: bool = Confirm::new()
@@ -211,7 +212,8 @@ pub fn run_channels_repair_wizard() -> Result<Config> {
         || config.channels_config.slack.is_some()
         || config.channels_config.imessage.is_some()
         || config.channels_config.matrix.is_some()
-        || config.channels_config.email.is_some();
+        || config.channels_config.email.is_some()
+        || config.channels_config.onebot.is_some();
 
     if has_channels && config.api_key.is_some() {
         let launch: bool = Confirm::new()
@@ -2230,6 +2232,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
         email: None,
         irc: None,
         lark: None,
+        onebot: None,
     };
 
     loop {
@@ -2298,13 +2301,21 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     "— HTTP endpoint"
                 }
             ),
+            format!(
+                "OneBot/QQ  {}",
+                if config.onebot.is_some() {
+                    "✅ connected"
+                } else {
+                    "— QQ via OneBotV11"
+                }
+            ),
             "Done — finish setup".to_string(),
         ];
 
         let choice = Select::new()
             .with_prompt("  Connect a channel (or Done to continue)")
             .items(&options)
-            .default(8)
+            .default(9)
             .interact()?;
 
         match choice {
@@ -3023,6 +3034,63 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     style(&port).cyan()
                 );
             }
+            8 => {
+                // ── OneBot/QQ ──
+                println!();
+                println!(
+                    "  {} {}",
+                    style("OneBot/QQ Setup").white().bold(),
+                    style("— QQ via OneBotV11 (go-cqhttp, NapCat, Lagrange)").dim()
+                );
+                print_bullet("1. Install an OneBotV11 implementation (NapCat, Lagrange, etc.)");
+                print_bullet("2. Enable the WebSocket server in your OneBot config");
+                print_bullet("3. Note the WebSocket URL (e.g., ws://127.0.0.1:3001)");
+                println!();
+
+                let ws_url: String = Input::new()
+                    .with_prompt("  WebSocket URL")
+                    .default("ws://127.0.0.1:3001".into())
+                    .interact_text()?;
+
+                let token: String = Input::new()
+                    .with_prompt("  Access token (optional, Enter to skip)")
+                    .allow_empty(true)
+                    .interact_text()?;
+
+                let prefix_str: String = Input::new()
+                    .with_prompt(
+                        "  Group trigger prefixes (comma-separated, e.g., /,!, Enter to skip)",
+                    )
+                    .allow_empty(true)
+                    .interact_text()?;
+
+                let group_trigger_prefix: Vec<String> = prefix_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
+                let users_str: String = Input::new()
+                    .with_prompt("  Allowed QQ numbers (comma-separated, '*' for all)")
+                    .allow_empty(true)
+                    .interact_text()?;
+
+                let allowed_users: Vec<String> = users_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
+                config.onebot = Some(OneBotConfig {
+                    ws_url,
+                    access_token: if token.is_empty() { None } else { Some(token) },
+                    reconnect_interval: 30,
+                    group_trigger_prefix,
+                    allowed_users,
+                });
+
+                println!("  {} OneBot configured", style("✅").green().bold());
+            }
             _ => break, // Done
         }
         println!();
@@ -3056,6 +3124,9 @@ fn setup_channels() -> Result<ChannelsConfig> {
     }
     if config.webhook.is_some() {
         active.push("Webhook");
+    }
+    if config.onebot.is_some() {
+        active.push("OneBot");
     }
 
     println!(
@@ -3507,7 +3578,8 @@ fn print_summary(config: &Config) {
         || config.channels_config.slack.is_some()
         || config.channels_config.imessage.is_some()
         || config.channels_config.matrix.is_some()
-        || config.channels_config.email.is_some();
+        || config.channels_config.email.is_some()
+        || config.channels_config.onebot.is_some();
 
     println!();
     println!(

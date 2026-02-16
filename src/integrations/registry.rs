@@ -125,6 +125,18 @@ pub fn all_integrations() -> Vec<IntegrationEntry> {
             category: IntegrationCategory::Chat,
             status_fn: |_| IntegrationStatus::ComingSoon,
         },
+        IntegrationEntry {
+            name: "OneBot/QQ",
+            description: "QQ via OneBotV11 protocol",
+            category: IntegrationCategory::Chat,
+            status_fn: |c| {
+                if c.channels_config.onebot.is_some() {
+                    IntegrationStatus::Active
+                } else {
+                    IntegrationStatus::Available
+                }
+            },
+        },
         // ── AI Models ───────────────────────────────────────────
         IntegrationEntry {
             name: "OpenRouter",

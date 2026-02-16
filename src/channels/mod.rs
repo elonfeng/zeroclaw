@@ -5,6 +5,7 @@ pub mod imessage;
 pub mod irc;
 pub mod lark;
 pub mod matrix;
+pub mod onebot;
 pub mod slack;
 pub mod telegram;
 pub mod traits;
@@ -17,6 +18,7 @@ pub use imessage::IMessageChannel;
 pub use irc::IrcChannel;
 pub use lark::LarkChannel;
 pub use matrix::MatrixChannel;
+pub use onebot::OneBotChannel;
 pub use slack::SlackChannel;
 pub use telegram::TelegramChannel;
 pub use traits::Channel;
@@ -555,6 +557,7 @@ pub fn handle_command(command: crate::ChannelCommands, config: &Config) -> Resul
                 ("Email", config.channels_config.email.is_some()),
                 ("IRC", config.channels_config.irc.is_some()),
                 ("Lark", config.channels_config.lark.is_some()),
+                ("OneBot", config.channels_config.onebot.is_some()),
             ] {
                 println!("  {} {name}", if configured { "✅" } else { "❌" });
             }
@@ -693,6 +696,19 @@ pub async fn doctor_channels(config: Config) -> Result<()> {
                 lk.verification_token.clone().unwrap_or_default(),
                 9898,
                 lk.allowed_users.clone(),
+            )),
+        ));
+    }
+
+    if let Some(ref ob) = config.channels_config.onebot {
+        channels.push((
+            "OneBot",
+            Arc::new(OneBotChannel::new(
+                ob.ws_url.clone(),
+                ob.access_token.clone(),
+                ob.reconnect_interval,
+                ob.group_trigger_prefix.clone(),
+                ob.allowed_users.clone(),
             )),
         ));
     }
@@ -955,6 +971,16 @@ pub async fn start_channels(config: Config) -> Result<()> {
             lk.verification_token.clone().unwrap_or_default(),
             9898,
             lk.allowed_users.clone(),
+        )));
+    }
+
+    if let Some(ref ob) = config.channels_config.onebot {
+        channels.push(Arc::new(OneBotChannel::new(
+            ob.ws_url.clone(),
+            ob.access_token.clone(),
+            ob.reconnect_interval,
+            ob.group_trigger_prefix.clone(),
+            ob.allowed_users.clone(),
         )));
     }
 
